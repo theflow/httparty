@@ -22,10 +22,28 @@ describe HTTParty::Request do
       @request.send(:http).use_ssl?.should == false
     end
 
-    it "should use basic auth when configured" do
+    it "should set up basic auth when configured" do
       @request.options[:basic_auth] = {:username => 'foobar', :password => 'secret'}
       @request.send(:setup_raw_request)
-      @request.instance_variable_get(:@raw_request)['authorization'].should_not be_nil
+    end
+  end
+
+  describe 'auth' do
+    it 'should set up oauth when configured' do
+      @request.options[:simple_oauth] = {:key => 'oauth_key', :secret => 'oauth_secret'}
+      @request.should_receive(:setup_simple_oauth)
+      @request.send(:setup_raw_request)
+    end
+
+    it 'should fill Authorization header when configured' do
+      @request.options[:simple_oauth] = {:key => 'oauth_key', :secret => 'oauth_secret', :method => 'HMAC-SHA1'}
+      @request.send(:setup_raw_request)
+      auth_header = @request.instance_variable_get(:@raw_request)['authorization']
+
+      auth_header.should_not be_nil
+      auth_header.should match(/oauth_consumer_key="oauth_key"/)
+      auth_header.should match(/oauth_signature_method="HMAC-SHA1"/)
+      auth_header.should match(/oauth_signature/)
     end
   end
 

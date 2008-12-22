@@ -1,4 +1,6 @@
 require 'uri'
+require 'oauth/consumer'
+require 'oauth/client/helper'
 
 module HTTParty
   class Request    
@@ -45,8 +47,20 @@ module HTTParty
         http
       end
 
-      def configure_basic_auth
+      def setup_basic_auth
         @raw_request.basic_auth(options[:basic_auth][:username], options[:basic_auth][:password])
+      end
+
+      def setup_simple_oauth
+        consumer = OAuth::Consumer.new(options[:simple_oauth][:key], options[:simple_oauth][:secret])
+        oauth_options = { :request_uri => uri,
+                          :consumer => consumer,
+                          :token => nil,
+                          :scheme => 'header',
+                          :signature_method => options[:simple_oauth][:method],
+                          :nonce => nil,
+                          :timestamp => nil }
+        @raw_request['authorization'] = OAuth::Client::Helper.new(@raw_request, oauth_options).header
       end
 
       def setup_raw_request
@@ -58,8 +72,9 @@ module HTTParty
         
         @raw_request.body = options[:body].is_a?(Hash) ? options[:body].to_params : options[:body] unless options[:body].blank?
         @raw_request.initialize_http_header options[:headers]
-        
-        configure_basic_auth if options[:basic_auth]
+
+        setup_basic_auth if options[:basic_auth]
+        setup_simple_oauth if options[:simple_oauth]
       end
 
       def perform_actual_request

@@ -81,7 +81,14 @@ describe HTTParty do
       Foo.default_options[:basic_auth].should == {:username => 'foobar', :password => 'secret'}
     end
   end
-  
+
+  describe "simple oauth authentication" do
+    it "should store the config" do
+      Foo.simple_oauth 'oauth_key', 'oauth_secret'
+      Foo.default_options[:simple_oauth].should == {:key => 'oauth_key', :secret => 'oauth_secret', :method => 'HMAC-SHA1'}
+    end
+  end
+
   describe "format" do
     it "should allow xml" do
       Foo.format :xml

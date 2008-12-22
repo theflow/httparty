@@ -6,6 +6,8 @@ require 'rubygems'
 gem 'json', '>= 1.1.3'
 require 'json'
 
+gem 'oauth'
+
 require 'module_level_inheritable_attributes'
 require 'core_extensions'
 
@@ -37,7 +39,11 @@ module HTTParty
     def basic_auth(u, p)
       default_options[:basic_auth] = {:username => u, :password => p}
     end
-    
+
+    def simple_oauth(oauth_key, oauth_secret, method = 'HMAC-SHA1')
+      default_options[:simple_oauth] = {:key => oauth_key, :secret => oauth_secret, :method => method}
+    end
+
     def default_params(h={})
       raise ArgumentError, 'Default params must be a hash' unless h.is_a?(Hash)
       default_options[:default_params] ||= {}
