@@ -20,9 +20,11 @@ module HTTParty
     end
     
     def uri
-      uri = path.relative? ? URI.parse("#{options[:base_uri]}#{path}") : path
-      uri.query = query_string(uri)
-      uri
+      @uri ||= begin
+        uri = path.relative? ? URI.parse("#{options[:base_uri]}#{path}") : path
+        uri.query = query_string(uri)
+        uri
+      end
     end
     
     def format
