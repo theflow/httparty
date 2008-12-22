@@ -78,7 +78,7 @@ module HTTParty
       end
 
       def perform_actual_request
-        http(uri).request(@raw_request)
+        http.request(@raw_request)
       end
 
       def get_response #:nodoc:
