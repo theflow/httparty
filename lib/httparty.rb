@@ -5,6 +5,9 @@ require 'net/https'
 require 'core_extensions'
 require 'httparty/module_inheritable_attributes'
 
+require 'rubygems'
+require 'oauth'
+
 module HTTParty
   
   AllowedFormats = {
