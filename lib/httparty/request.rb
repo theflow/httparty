@@ -3,7 +3,7 @@ require 'oauth/consumer'
 require 'oauth/client/helper'
 
 module HTTParty
-  class Request    
+  class Request #:nodoc:
     SupportedHTTPMethods = [Net::HTTP::Get, Net::HTTP::Post, Net::HTTP::Put, Net::HTTP::Delete]
     
     attr_accessor :http_method, :path, :options
@@ -22,11 +22,14 @@ module HTTParty
     end
     
     def uri
-      @uri ||= begin
-        uri = path.relative? ? URI.parse("#{options[:base_uri]}#{path}") : path
-        uri.query = query_string(uri)
-        uri
+      new_uri = path.relative? ? URI.parse("#{options[:base_uri]}#{path}") : path
+      
+      # avoid double query string on redirects [#12]
+      unless @redirect
+        new_uri.query = query_string(new_uri)
       end
+      
+      new_uri
     end
     
     def format
@@ -34,24 +37,24 @@ module HTTParty
     end
     
     def perform
-      validate!
+      validate
       setup_raw_request
-      handle_response!(get_response)
+      handle_response(get_response)
     end
 
     private
-      def http #:nodoc:
+      def http
         http = Net::HTTP.new(uri.host, uri.port, options[:http_proxyaddr], options[:http_proxyport])
         http.use_ssl = (uri.port == 443)
         http.verify_mode = OpenSSL::SSL::VERIFY_NONE
         http
       end
 
-      def setup_basic_auth
+      def configure_basic_auth
         @raw_request.basic_auth(options[:basic_auth][:username], options[:basic_auth][:password])
       end
 
-      def setup_simple_oauth
+      def configure_simple_oauth
         consumer = OAuth::Consumer.new(options[:simple_oauth][:key], options[:simple_oauth][:secret])
         oauth_options = { :request_uri => uri,
                           :consumer => consumer,
@@ -73,8 +76,8 @@ module HTTParty
         @raw_request.body = options[:body].is_a?(Hash) ? options[:body].to_params : options[:body] unless options[:body].blank?
         @raw_request.initialize_http_header options[:headers]
 
-        setup_basic_auth if options[:basic_auth]
-        setup_simple_oauth if options[:simple_oauth]
+        configure_basic_auth if options[:basic_auth]
+        configure_simple_oauth if options[:simple_oauth]
       end
 
       def perform_actual_request
@@ -87,7 +90,7 @@ module HTTParty
         response
       end
       
-      def query_string(uri) #:nodoc:
+      def query_string(uri)
         query_string_parts = []
         query_string_parts << uri.query unless uri.query.blank?
 
@@ -102,40 +105,41 @@ module HTTParty
       end
       
       # Raises exception Net::XXX (http error code) if an http error occured
-      def handle_response!(response) #:nodoc:
+      def handle_response(response)
         case response
-        when Net::HTTPSuccess
-          parse_response(response.body)
-        when Net::HTTPRedirection
-          options[:limit] -= 1
-          self.path = response['location']
-          perform
-        else
-          response.instance_eval { class << self; attr_accessor :body_parsed; end }
-          begin; response.body_parsed = parse_response(response.body); rescue; end
-          response.error! # raises  exception corresponding to http error Net::XXX
-        end
+          when Net::HTTPRedirection
+            options[:limit] -= 1
+            self.path = response['location']
+            @redirect = true
+            perform
+          else
+            parsed_response = parse_response(response.body)
+            Response.new(parsed_response, response.body, response.code, response.to_hash)
+          end
       end
       
-      def parse_response(body) #:nodoc:
+      def parse_response(body)
         return nil if body.nil? or body.empty?
         case format
-        when :xml
-          ToHashParser.from_xml(body)
-        when :json
-          JSON.parse(body)
-        else
-          body
-        end
+          when :xml
+            HTTParty::Parsers::XML.parse(body)
+          when :json
+            HTTParty::Parsers::JSON.decode(body)
+          when :yaml
+            YAML::load(body)
+          else
+            body
+          end
       end
   
       # Uses the HTTP Content-Type header to determine the format of the response
       # It compares the MIME type returned to the types stored in the AllowedFormats hash
-      def format_from_mimetype(mimetype) #:nodoc:
-        AllowedFormats.each { |k, v| return k if mimetype.include?(v) }
+      def format_from_mimetype(mimetype)
+        return nil if mimetype.nil?
+        AllowedFormats.each { |k, v| return v if mimetype.include?(k) }
       end
       
-      def validate! #:nodoc:
+      def validate
         raise HTTParty::RedirectionTooDeep, 'HTTP redirects too deep' if options[:limit].to_i <= 0
         raise ArgumentError, 'only get, post, put and delete methods are supported' unless SupportedHTTPMethods.include?(http_method)
         raise ArgumentError, ':headers must be a hash' if options[:headers] && !options[:headers].is_a?(Hash)
